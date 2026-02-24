@@ -1,4 +1,4 @@
-const CACHE_NAME = "inventory-app-v7";   // 🔁 change version each update
+const CACHE_NAME = "inventory-app-v9";   // 🔁 change version each update
 
 const ASSETS = [
   "./",
@@ -34,3 +34,4 @@ self.addEventListener("fetch", e => {
   );
 
 });
+
