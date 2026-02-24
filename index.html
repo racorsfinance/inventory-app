@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Inventory Tracker v1.7</title>
+<title>Inventory Tracker v1.7.1</title>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2c3e50">
 
-<!-- Firebase (COMPAT version for normal HTML usage) -->
+<!-- Firebase (COMPAT version) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -31,17 +31,12 @@ button.warn{background:#e74c3c;color:#fff;border:none}
 .warnlvl{background:#fcf3cf}
 .crit{background:#f5b7b1}
 .badge{background:#f8d7da;color:#721c24;padding:10px;border-radius:6px;margin-bottom:12px}
-.chart-wrap{width:100%;overflow-x:auto}
-canvas{display:block}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;z-index:10}
-.modal-content{background:#fff;margin:8% auto;padding:15px;width:92%;max-width:420px;border-radius:6px}
 </style>
 </head>
 
 <body>
 
 <header><h2>Inventory Tracker</h2></header>
-<div id="userInfo" style="float:right; font-size:13px; padding:6px 10px;"></div>
 
 <div id="authBar" style="padding:6px;text-align:right;background:#ecf0f1">
   <span id="userInfo">Not logged in</span>
@@ -61,21 +56,11 @@ canvas{display:block}
 <section id="dashboard" class="active">
 <h3>Dashboard</h3>
 
-<select id="dashMonth" onchange="renderDashboard()"></select>
-<select id="dashYear" onchange="renderDashboard()"></select>
-
 <div id="criticalBadge"></div>
 
 <div class="card">
 <h4>Item Status</h4>
 <div class="status-list" id="itemStatusList"></div>
-</div>
-
-<div class="card">
-<h4>Monthly In / Out</h4>
-<div class="chart-wrap">
-<canvas id="consumptionChart" height="260"></canvas>
-</div>
 </div>
 </section>
 
@@ -108,8 +93,6 @@ canvas{display:block}
 <!-- REPORT -->
 <section id="reports">
 <h3>Reports</h3>
-<select id="repMonth"></select>
-<select id="repYear"></select>
 <button onclick="generateReport()">Generate</button>
 <div id="reportView"></div>
 </section>
@@ -127,248 +110,196 @@ canvas{display:block}
 
 <script>
 
-/* ===== FIREBASE CONFIG ===== */
+/* FIREBASE CONFIG */
 const firebaseConfig = {
-  apiKey: "AIzaSyBwvLHUwfI9c3aSWR2N46VmwRFL8ZRXWX4",
+  apiKey: "YOUR_REAL_API_KEY",
   authDomain: "inventory-tracker-1bc0a.firebaseapp.com",
-  projectId: "inventory-tracker-1bc0a",
-  storageBucket: "inventory-tracker-1bc0a.firebasestorage.app",
-  messagingSenderId: "961763374661",
-  appId: "1:961763374661:web:28a5065c62249d0f52d52c"
+  projectId: "inventory-tracker-1bc0a"
 };
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-/* ===== DATA ===== */
+/* DATA */
 let items = [];
 let logs = [];
 
-/* ===== AUTH ===== */
+/* AUTH */
 function login(){
  const provider = new firebase.auth.GoogleAuthProvider();
- auth.signInWithPopup(provider)
- .then(result=>{
-   document.getElementById("userStatus").innerText =
-   "Logged in: " + result.user.email;
- })
- .catch(err=>{
-   alert("Login Error: "+err.message);
- });
+ auth.signInWithPopup(provider);
 }
-
-function logout(){
- auth.signOut().then(()=>{
-   document.getElementById("userStatus").innerText="Not logged in";
- });
-}
+function logout(){ auth.signOut(); }
 
 auth.onAuthStateChanged(user=>{
   if(user){
-    document.getElementById("userInfo").innerText = user.displayName || user.email;
+    document.getElementById("userInfo").innerText = user.email;
 
-    // 🔥 Real-time sync from Firebase
     db.collection("inventory").doc("mainData")
-      .onSnapshot(doc=>{
-        if(doc.exists){
-          const data = doc.data();
-          items = data.items || [];
-          logs  = data.logs  || [];
-          renderAll();
-        } else {
-          // first-time user case
-          items = [];
-          logs  = [];
-          renderAll();
-        }
-      });
-
+    .onSnapshot(doc=>{
+      if(doc.exists){
+        const d = doc.data();
+        items = d.items || [];
+        logs = d.logs || [];
+        renderAll();
+      }
+    });
   } else {
     document.getElementById("userInfo").innerText = "Not logged in";
   }
 });
-/* ===== SAVE ===== */
+
+/* SAVE */
 function save(){
   if(auth.currentUser){
-    db.collection("inventory").doc("mainData").set({
-      items: items,
-      logs: logs
-    });
+    db.collection("inventory").doc("mainData").set({items,logs});
   }
 }
 
-/* ===== ITEMS ===== */
+/* ITEMS */
 function addItem(){
-  items.push({
-    id: Date.now(),
-    name: itemName.value,
-    stock: +openingStock.value || 0,
-    min: +minStock.value || 0,
-    uom: uom.value || "PCS",
-    status:"active"
-  });
-
-  itemName.value="";
-  openingStock.value="";
-  minStock.value="";
-  uom.value="";
-
-  save();
+ items.push({
+  id:Date.now(),
+  name:itemName.value,
+  stock:+openingStock.value||0,
+  min:+minStock.value||0,
+  uom:uom.value||"PCS"
+ });
+ itemName.value=""; openingStock.value=""; minStock.value=""; uom.value="";
+ save();
 }
 
-/* ===== STOCK LOG ===== */
+/* LOG */
 function addLog(){
-  let it = items.find(x=>x.id == logItem.value);
-  let qty = +logQty.value;
-  let change = (logType.value==="out") ? -qty : qty;
+ let it = items.find(x=>x.id==logItem.value);
+ let qty = +logQty.value;
+ let change = logType.value==="out" ? -qty : qty;
 
-  it.stock += change;
+ it.stock += change;
 
-  logs.push({
-    ts:new Date().toISOString(),
-    item:it.name,
-    qty:qty,
-    change:change,
-    ref:logRef.value,
-    uom:it.uom
-  });
+ logs.push({
+  ts:new Date().toISOString(),
+  item:it.name,
+  qty:qty,
+  change:change,
+  ref:logRef.value
+ });
 
-  logQty.value="";
-  logRef.value="";
-
-  save();
+ logQty.value=""; logRef.value="";
+ save();
 }
 
-/* ===== RENDER ===== */
+/* RENDER */
 function renderItems(){
-  itemList.innerHTML="";
-  logItem.innerHTML="";
-  items.forEach(i=>{
-    itemList.innerHTML += `<div class="card"><b>${i.name}</b> - ${i.stock} ${i.uom}</div>`;
-    logItem.innerHTML += `<option value="${i.id}">${i.name}</option>`;
-  });
+ itemList.innerHTML="";
+ logItem.innerHTML="";
+ items.forEach(i=>{
+  itemList.innerHTML+=`<div class="card">${i.name} - ${i.stock}</div>`;
+  logItem.innerHTML+=`<option value="${i.id}">${i.name}</option>`;
+ });
 }
 
 function renderLogs(){
-  logList.innerHTML="";
-  logs.slice().reverse().forEach(l=>{
-    logList.innerHTML += `<div class="card">
-      ${new Date(l.ts).toLocaleString()}<br>
-      ${l.item} (${l.change})<br>
-      ${l.ref||""}
-    </div>`;
-  });
+ logList.innerHTML="";
+ logs.slice().reverse().forEach(l=>{
+  logList.innerHTML+=`<div class="card">
+   ${new Date(l.ts).toLocaleString()}<br>
+   ${l.item} (${l.change})<br>${l.ref||""}
+  </div>`;
+ });
 }
 
-/* ===== DASHBOARD ===== */
 function renderDashboard(){
-  let html="";
-  let critical=[];
+ let html="";
+ let critical=[];
 
-  items.forEach(i=>{
-    let cls="ok";
-    if(i.stock <= i.min) cls="crit";
-    else if(i.stock <= i.min+5) cls="warnlvl";
+ items.forEach(i=>{
+  let cls="ok";
+  if(i.stock<=i.min) cls="crit";
+  else if(i.stock<=i.min+5) cls="warnlvl";
 
-    html+=`<div class="status-row ${cls}">
-      <span>${i.name}</span>
-      <span>${i.stock} / ${i.min}</span>
-    </div>`;
+  html+=`<div class="status-row ${cls}">
+   <span>${i.name}</span>
+   <span>${i.stock}/${i.min}</span>
+  </div>`;
 
-    if(cls==="crit"){
-      critical.push(`${i.name} (${i.stock}/${i.min})`);
-    }
-  });
+  if(cls==="crit") critical.push(i.name);
+ });
 
-  itemStatusList.innerHTML=html;
+ itemStatusList.innerHTML=html;
 
-  if(critical.length){
-    criticalBadge.innerHTML = `<div class="badge">⚠ Low Stock: ${critical.join(", ")}</div>`;
-  } else {
-    criticalBadge.innerHTML="";
-  }
+ criticalBadge.innerHTML = critical.length
+  ? `<div class="badge">⚠ Low Stock: ${critical.join(", ")}</div>`
+  : "";
 }
 
-/* ===== REPORT ===== */
+/* REPORT */
 function generateReport(){
-  reportView.innerHTML = logs.map(l=>`
-    ${new Date(l.ts).toLocaleDateString()} - ${l.item} ${l.qty}<br>
-  `).join("");
+ reportView.innerHTML = logs.map(l=>`
+  ${new Date(l.ts).toLocaleDateString()} - ${l.item} (${l.qty}) - ${l.ref||""}
+ `).join("<br>");
 }
 
-/* ===== CSV ===== */
+/* CSV */
 function exportItemsCSV(){
-  let rows=[["Item","Stock","Min"]];
-  items.forEach(i=>rows.push([i.name,i.stock,i.min]));
-  downloadCSV("items.csv",rows);
+ downloadCSV("items.csv",[["Item","Stock","Min"],...items.map(i=>[i.name,i.stock,i.min])]);
 }
-
 function exportLogsCSV(){
-  let rows=[["Date","Item","Qty","Remarks"]];
-  logs.forEach(l=>rows.push([l.ts,l.item,l.qty,l.ref]));
-  downloadCSV("logs.csv",rows);
+ downloadCSV("logs.csv",[["Date","Item","Qty","Remarks"],...logs.map(l=>[l.ts,l.item,l.qty,l.ref])]);
 }
-
 function exportAllCSV(){
-  let rows=[["ITEMS"],[],["Name","Stock"]];
-  items.forEach(i=>rows.push([i.name,i.stock]));
-  rows.push([],["LOGS"]);
-  logs.forEach(l=>rows.push([l.ts,l.item,l.qty,l.ref]));
-  downloadCSV("all.csv",rows);
+ let rows=[["ITEMS"],["Name","Stock"]];
+ items.forEach(i=>rows.push([i.name,i.stock]));
+ rows.push(["LOGS"]);
+ logs.forEach(l=>rows.push([l.ts,l.item,l.qty,l.ref]));
+ downloadCSV("all.csv",rows);
 }
-
 function downloadCSV(name,rows){
-  let csv=rows.map(r=>r.join(",")).join("\n");
-  let a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([csv]));
-  a.download=name;
-  a.click();
+ let csv=rows.map(r=>r.join(",")).join("\n");
+ let a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob([csv]));
+ a.download=name;
+ a.click();
 }
 
-/* ===== BACKUP / RESTORE ===== */
+/* BACKUP */
 function backupJSON(){
-  let blob=new Blob([JSON.stringify({items,logs})]);
-  let a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download="backup.json";
-  a.click();
+ let a=document.createElement("a");
+ a.href=URL.createObjectURL(new Blob([JSON.stringify({items,logs})]));
+ a.download="backup.json";
+ a.click();
 }
-
 function restoreJSON(e){
-  let file=e.target.files[0];
-  let r=new FileReader();
-  r.onload=()=>{
-    let d=JSON.parse(r.result);
-    items=d.items||[];
-    logs=d.logs||[];
-    save();
-  };
-  r.readAsText(file);
+ let f=e.target.files[0];
+ let r=new FileReader();
+ r.onload=()=>{
+  let d=JSON.parse(r.result);
+  items=d.items||[];
+  logs=d.logs||[];
+  save();
+ };
+ r.readAsText(f);
 }
-
 function resetAll(){
-  if(confirm("Reset all data?")){
-    items=[];
-    logs=[];
-    save();
-  }
+ if(confirm("Reset all data?")){
+  items=[]; logs=[];
+  save();
+ }
 }
 
-/* ===== NAV ===== */
+/* NAV */
 function showTab(id,btn){
  document.querySelectorAll("section").forEach(s=>s.classList.remove("active"));
  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
-
  document.getElementById(id).classList.add("active");
  btn.classList.add("active");
 }
 
-/* ===== INIT ===== */
 function renderAll(){
-  renderItems();
-  renderLogs();
-  renderDashboard();
+ renderItems();
+ renderLogs();
+ renderDashboard();
 }
 
 </script>
