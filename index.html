@@ -120,6 +120,13 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+auth.getRedirectResult().then(result=>{
+  if(result.user){
+    console.log("Login success:", result.user.email);
+  }
+}).catch(err=>{
+  alert("Login Error: " + err.message);
+});
 
 /* DATA */
 let items = [];
@@ -128,7 +135,7 @@ let logs = [];
 /* AUTH */
 function login(){
  const provider = new firebase.auth.GoogleAuthProvider();
- auth.signInWithPopup(provider);
+ auth.signInWithRedirect(provider);
 }
 function logout(){ auth.signOut(); }
 
