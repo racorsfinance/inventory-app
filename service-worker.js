@@ -1,4 +1,4 @@
-const CACHE_NAME = "inventory-app-v6";   // 🔁 change version each update
+const CACHE_NAME = "inventory-app-v7";   // 🔁 change version each update
 
 const ASSETS = [
   "./",
@@ -32,4 +32,5 @@ self.addEventListener("fetch", e => {
   e.respondWith(
     caches.match(e.request).then(res => res || fetch(e.request))
   );
+
 });
